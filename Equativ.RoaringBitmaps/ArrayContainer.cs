@@ -208,11 +208,24 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear();
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
-            scratch[v >> 6] |= 1UL << v;
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
         }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3;
+        maxIdx = (maxIdx | 3);
 
         var added = 0;
 
@@ -221,7 +234,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             fixed (ulong* t = scratch)
             fixed (ulong* b = bitmap)
             {
-                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                for (int k = minIdx; k <= maxIdx; k += 4)
                 {
                     var prev = Avx.LoadVector256(b + k);
                     var tmp = Avx.LoadVector256(t + k);
@@ -263,11 +276,24 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear();
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
-            scratch[v >> 6] |= 1UL << v;
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
         }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3;
+        maxIdx = (maxIdx | 3);
 
         var delta = 0;
 
@@ -276,7 +302,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             fixed (ulong* t = scratch)
             fixed (ulong* b = bitmap)
             {
-                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                for (int k = minIdx; k <= maxIdx; k += 4)
                 {
                     var prev = Avx.LoadVector256(b + k);
                     var tmp = Avx.LoadVector256(t + k);
@@ -324,11 +350,24 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear();
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
-            scratch[v >> 6] |= 1UL << v;
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
         }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3;
+        maxIdx = (maxIdx | 3);
 
         var delta = 0;
 
@@ -337,7 +376,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             fixed (ulong* t = scratch)
             fixed (ulong* b = bitmap)
             {
-                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                for (int k = minIdx; k <= maxIdx; k += 4)
                 {
                     var prev = Avx.LoadVector256(b + k);
                     var tmp = Avx.LoadVector256(t + k);
