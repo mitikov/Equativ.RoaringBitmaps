@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace Equativ.RoaringBitmaps;
 
 internal class ArrayContainer : Container, IEquatable<ArrayContainer>
 {
     public static readonly ArrayContainer One;
+    private const int BitmapContainerBitmapLength = 1024;
     private readonly ushort[] _content;
     private readonly int _cardinality;
 
@@ -196,6 +199,41 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         return extraCardinality;
     }
 
+    public int OrArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return OrArray(bitmap);
+        }
+
+        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            scratch[v >> 6] |= 1UL << v;
+        }
+
+        var before = Utils.Popcnt(bitmap);
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                {
+                    var left = Avx.LoadVector256(b + k);
+                    var right = Avx.LoadVector256(t + k);
+                    left = Avx2.Or(left, right);
+                    Avx.Store(b + k, left);
+                }
+            }
+        }
+
+        var after = Utils.Popcnt(bitmap);
+        return after - before;
+    }
+
     public int XorArray(ulong[] bitmap)
     {
         var extraCardinality = 0;
@@ -210,6 +248,41 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             extraCardinality += (int) (1 - 2 * ((previous & mask) >> yValue));
         }
         return extraCardinality;
+    }
+
+    public int XorArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return XorArray(bitmap);
+        }
+
+        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            scratch[v >> 6] |= 1UL << v;
+        }
+
+        var before = Utils.Popcnt(bitmap);
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                {
+                    var left = Avx.LoadVector256(b + k);
+                    var right = Avx.LoadVector256(t + k);
+                    left = Avx2.Xor(left, right);
+                    Avx.Store(b + k, left);
+                }
+            }
+        }
+
+        var after = Utils.Popcnt(bitmap);
+        return after - before;
     }
 
 
@@ -227,6 +300,41 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             extraCardinality -= (int) ((previous ^ after) >> yValue);
         }
         return extraCardinality;
+    }
+
+    public int AndNotArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return AndNotArray(bitmap);
+        }
+
+        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            scratch[v >> 6] |= 1UL << v;
+        }
+
+        var before = Utils.Popcnt(bitmap);
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
+                {
+                    var left = Avx.LoadVector256(b + k);
+                    var right = Avx.LoadVector256(t + k);
+                    left = Avx2.AndNot(right, left);
+                    Avx.Store(b + k, left);
+                }
+            }
+        }
+
+        var after = Utils.Popcnt(bitmap);
+        return after - before;
     }
 
     public override bool Equals(object? obj)

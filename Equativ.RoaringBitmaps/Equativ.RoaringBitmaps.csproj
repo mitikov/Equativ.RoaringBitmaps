@@ -11,6 +11,7 @@
     <Authors>Equativ.RoaringBitmaps Contributors</Authors>
     <Product>Equativ.RoaringBitmaps</Product>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   
   <ItemGroup>
