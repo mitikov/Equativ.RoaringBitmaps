@@ -1,12 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+using System.Numerics;
 
 namespace Equativ.RoaringBitmaps;
 
 internal class ArrayContainer : Container, IEquatable<ArrayContainer>
 {
     public static readonly ArrayContainer One;
+    private const int BitmapContainerBitmapLength = 1024;
     private readonly ushort[] _content;
     private readonly int _cardinality;
 
@@ -196,6 +200,58 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         return extraCardinality;
     }
 
+    public int OrArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return OrArray(bitmap);
+        }
+
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear(); // zero-initialize the temporary bitmap
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
+        }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3; // round down to nearest multiple of four
+        maxIdx = (maxIdx | 3); // round up to next multiple of four minus one
+
+        var added = 0;
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = minIdx; k <= maxIdx; k += 4)
+                {
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var addMask = Avx2.AndNot(prev, tmp);
+                    var result = Avx2.Or(prev, tmp);
+                    Avx.Store(b + k, result);
+                    added += BitOperations.PopCount(addMask.GetElement(0));
+                    added += BitOperations.PopCount(addMask.GetElement(1));
+                    added += BitOperations.PopCount(addMask.GetElement(2));
+                    added += BitOperations.PopCount(addMask.GetElement(3));
+                }
+            }
+        }
+
+        return added;
+    }
+
     public int XorArray(ulong[] bitmap)
     {
         var extraCardinality = 0;
@@ -210,6 +266,63 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             extraCardinality += (int) (1 - 2 * ((previous & mask) >> yValue));
         }
         return extraCardinality;
+    }
+
+    public int XorArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return XorArray(bitmap);
+        }
+
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear(); // zero-initialize the temporary bitmap
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
+        }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3; // align down so AVX loads start on a 4-word boundary
+        maxIdx = (maxIdx | 3); // align up so the loop processes whole vectors
+
+        var delta = 0;
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = minIdx; k <= maxIdx; k += 4)
+                {
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var addedMask = Avx2.AndNot(prev, tmp);
+                    var removedMask = Avx2.And(prev, tmp);
+                    var result = Avx2.Xor(prev, tmp);
+                    Avx.Store(b + k, result);
+                    delta += BitOperations.PopCount(addedMask.GetElement(0));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(0));
+                    delta += BitOperations.PopCount(addedMask.GetElement(1));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(1));
+                    delta += BitOperations.PopCount(addedMask.GetElement(2));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(2));
+                    delta += BitOperations.PopCount(addedMask.GetElement(3));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(3));
+                }
+            }
+        }
+
+        return delta;
     }
 
 
@@ -227,6 +340,58 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             extraCardinality -= (int) ((previous ^ after) >> yValue);
         }
         return extraCardinality;
+    }
+
+    public int AndNotArrayVectorized(ulong[] bitmap)
+    {
+        if (!Avx2.IsSupported)
+        {
+            return AndNotArray(bitmap);
+        }
+
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
+        scratch.Clear(); // zero-initialize the temporary bitmap
+        var minIdx = BitmapContainerBitmapLength;
+        var maxIdx = -1;
+        for (var i = 0; i < _cardinality; i++)
+        {
+            var v = _content[i];
+            var idx = v >> 6;
+            scratch[idx] |= 1UL << v;
+            if (idx < minIdx) minIdx = idx;
+            if (idx > maxIdx) maxIdx = idx;
+        }
+        if (maxIdx < 0)
+        {
+            return 0;
+        }
+
+        minIdx &= ~3; // start index rounded down to a multiple of four
+        maxIdx = (maxIdx | 3); // end index rounded up to cover final vector
+
+        var delta = 0;
+
+        unsafe
+        {
+            fixed (ulong* t = scratch)
+            fixed (ulong* b = bitmap)
+            {
+                for (int k = minIdx; k <= maxIdx; k += 4)
+                {
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var removedMask = Avx2.And(prev, tmp);
+                    var result = Avx2.AndNot(tmp, prev);
+                    Avx.Store(b + k, result);
+                    delta -= BitOperations.PopCount(removedMask.GetElement(0));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(1));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(2));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(3));
+                }
+            }
+        }
+
+        return delta;
     }
 
     public override bool Equals(object? obj)
