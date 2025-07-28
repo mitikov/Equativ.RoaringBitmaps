@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using System.Numerics;
 
 namespace Equativ.RoaringBitmaps;
 
@@ -206,14 +207,14 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return OrArray(bitmap);
         }
 
-        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
             scratch[v >> 6] |= 1UL << v;
         }
 
-        var before = Utils.Popcnt(bitmap);
+        var added = 0;
 
         unsafe
         {
@@ -222,16 +223,20 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             {
                 for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
                 {
-                    var left = Avx.LoadVector256(b + k);
-                    var right = Avx.LoadVector256(t + k);
-                    left = Avx2.Or(left, right);
-                    Avx.Store(b + k, left);
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var addMask = Avx2.AndNot(prev, tmp);
+                    var result = Avx2.Or(prev, tmp);
+                    Avx.Store(b + k, result);
+                    added += BitOperations.PopCount(addMask.GetElement(0));
+                    added += BitOperations.PopCount(addMask.GetElement(1));
+                    added += BitOperations.PopCount(addMask.GetElement(2));
+                    added += BitOperations.PopCount(addMask.GetElement(3));
                 }
             }
         }
 
-        var after = Utils.Popcnt(bitmap);
-        return after - before;
+        return added;
     }
 
     public int XorArray(ulong[] bitmap)
@@ -257,14 +262,14 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return XorArray(bitmap);
         }
 
-        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
             scratch[v >> 6] |= 1UL << v;
         }
 
-        var before = Utils.Popcnt(bitmap);
+        var delta = 0;
 
         unsafe
         {
@@ -273,16 +278,25 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             {
                 for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
                 {
-                    var left = Avx.LoadVector256(b + k);
-                    var right = Avx.LoadVector256(t + k);
-                    left = Avx2.Xor(left, right);
-                    Avx.Store(b + k, left);
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var addedMask = Avx2.AndNot(prev, tmp);
+                    var removedMask = Avx2.And(prev, tmp);
+                    var result = Avx2.Xor(prev, tmp);
+                    Avx.Store(b + k, result);
+                    delta += BitOperations.PopCount(addedMask.GetElement(0));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(0));
+                    delta += BitOperations.PopCount(addedMask.GetElement(1));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(1));
+                    delta += BitOperations.PopCount(addedMask.GetElement(2));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(2));
+                    delta += BitOperations.PopCount(addedMask.GetElement(3));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(3));
                 }
             }
         }
 
-        var after = Utils.Popcnt(bitmap);
-        return after - before;
+        return delta;
     }
 
 
@@ -309,14 +323,14 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return AndNotArray(bitmap);
         }
 
-        var scratch = GC.AllocateUninitializedArray<ulong>(BitmapContainerBitmapLength);
+        Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
         for (var i = 0; i < _cardinality; i++)
         {
             var v = _content[i];
             scratch[v >> 6] |= 1UL << v;
         }
 
-        var before = Utils.Popcnt(bitmap);
+        var delta = 0;
 
         unsafe
         {
@@ -325,16 +339,20 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             {
                 for (int k = 0; k < BitmapContainerBitmapLength; k += 4)
                 {
-                    var left = Avx.LoadVector256(b + k);
-                    var right = Avx.LoadVector256(t + k);
-                    left = Avx2.AndNot(right, left);
-                    Avx.Store(b + k, left);
+                    var prev = Avx.LoadVector256(b + k);
+                    var tmp = Avx.LoadVector256(t + k);
+                    var removedMask = Avx2.And(prev, tmp);
+                    var result = Avx2.AndNot(tmp, prev);
+                    Avx.Store(b + k, result);
+                    delta -= BitOperations.PopCount(removedMask.GetElement(0));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(1));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(2));
+                    delta -= BitOperations.PopCount(removedMask.GetElement(3));
                 }
             }
         }
 
-        var after = Utils.Popcnt(bitmap);
-        return after - before;
+        return delta;
     }
 
     public override bool Equals(object? obj)
