@@ -208,7 +208,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
-        scratch.Clear();
+        scratch.Clear(); // zero-initialize the temporary bitmap
         var minIdx = BitmapContainerBitmapLength;
         var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
@@ -224,8 +224,8 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return 0;
         }
 
-        minIdx &= ~3;
-        maxIdx = (maxIdx | 3);
+        minIdx &= ~3; // round down to nearest multiple of four
+        maxIdx = (maxIdx | 3); // round up to next multiple of four minus one
 
         var added = 0;
 
@@ -276,7 +276,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
-        scratch.Clear();
+        scratch.Clear(); // zero-initialize the temporary bitmap
         var minIdx = BitmapContainerBitmapLength;
         var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
@@ -292,8 +292,8 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return 0;
         }
 
-        minIdx &= ~3;
-        maxIdx = (maxIdx | 3);
+        minIdx &= ~3; // align down so AVX loads start on a 4-word boundary
+        maxIdx = (maxIdx | 3); // align up so the loop processes whole vectors
 
         var delta = 0;
 
@@ -350,7 +350,7 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
         }
 
         Span<ulong> scratch = stackalloc ulong[BitmapContainerBitmapLength];
-        scratch.Clear();
+        scratch.Clear(); // zero-initialize the temporary bitmap
         var minIdx = BitmapContainerBitmapLength;
         var maxIdx = -1;
         for (var i = 0; i < _cardinality; i++)
@@ -366,8 +366,8 @@ internal class ArrayContainer : Container, IEquatable<ArrayContainer>
             return 0;
         }
 
-        minIdx &= ~3;
-        maxIdx = (maxIdx | 3);
+        minIdx &= ~3; // start index rounded down to a multiple of four
+        maxIdx = (maxIdx | 3); // end index rounded up to cover final vector
 
         var delta = 0;
 
