@@ -180,6 +180,31 @@ public class RoaringBitmap : IEnumerable<int>, IEquatable<RoaringBitmap>
     }
 
     /// <summary>
+    /// Bitwise And operation of multiple RoaringBitmaps
+    /// </summary>
+    /// <param name="candidates">RoaringBitmaps to intersect</param>
+    /// <returns>RoaringBitmap</returns>
+    public static RoaringBitmap And(params RoaringBitmap[] candidates)
+    {
+        if (candidates == null)
+        {
+            throw new ArgumentNullException(nameof(candidates));
+        }
+        if (candidates.Length == 0)
+        {
+            throw new ArgumentException("At least one candidate is required", nameof(candidates));
+        }
+
+        var result = candidates[0] ?? throw new ArgumentNullException(nameof(candidates), "Bitmap at index 0 is null");
+        for (var i = 1; i < candidates.Length; i++)
+        {
+            var candidate = candidates[i] ?? throw new ArgumentNullException(nameof(candidates), $"Bitmap at index {i} is null");
+            result = result & candidate;
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Bitwise AndNot operation of two RoaringBitmaps
     /// </summary>
     /// <param name="x">RoaringBitmap</param>
