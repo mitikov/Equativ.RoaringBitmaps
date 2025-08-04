@@ -153,6 +153,28 @@ internal static class Utils
         return pos;
     }
 
+    public static int IntersectArrays(ushort[] buffer, params ushort[][] sets)
+    {
+        if (sets.Length == 0)
+        {
+            return 0;
+        }
+
+        if (sets.Length == 1)
+        {
+            sets[0].AsSpan().CopyTo(buffer);
+            return sets[0].Length;
+        }
+
+        var cardinality = IntersectArrays(sets[0].AsSpan(), sets[1].AsSpan(), buffer);
+        for (var i = 2; i < sets.Length && cardinality > 0; i++)
+        {
+            cardinality = IntersectArrays(buffer.AsSpan(0, cardinality), sets[i], buffer);
+        }
+
+        return cardinality;
+    }
+
     public static int IntersectArrays(ReadOnlySpan<ushort> set1, ReadOnlySpan<ushort> set2, ushort[] buffer)
     {
         if (set1.Length << 6 < set2.Length)

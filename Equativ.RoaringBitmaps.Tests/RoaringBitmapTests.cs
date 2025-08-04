@@ -236,6 +236,19 @@ public class RoaringBitmapTests
     }
 
     [Fact]
+    public void AndMultiple()
+    {
+        var rb1 = RoaringBitmap.Create(Enumerable.Range(0, 100));
+        var rb2 = RoaringBitmap.Create(Enumerable.Range(50, 100));
+        var rb3 = RoaringBitmap.Create(Enumerable.Range(75, 100));
+
+        var expected = (rb1 & rb2) & rb3;
+        var actual = RoaringBitmap.And(rb1, rb2, rb3);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
     public void BasicCreate()
     {
         var rb = RoaringBitmap.Create(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
